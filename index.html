@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Moinuddin Kader Chowdhury — Software Engineer, retail payments</title>
+<meta name="description" content="C++ engineer building cash-register software: card terminal drivers, fiscal printing and receipt logic for retail chains across Scandinavia, Germany and Poland.">
+<meta property="og:title" content="Moinuddin Kader Chowdhury — Software Engineer">
+<meta property="og:description" content="I write the C++ that runs inside cash registers: card terminals, fiscal printers, receipts.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧾</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=Martian+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --counter:#DDE2E6;      /* checkout counter / terminal housing */
+  --paper:#FDFDFB;        /* thermal paper */
+  --ink:#1B232B;          /* thermal print */
+  --muted:#56626D;
+  --rule:#C3CAD0;
+  --ok:#0E8A4F;           /* keypad green */
+  --clear:#D9A400;        /* keypad yellow */
+  --cancel:#C0392B;       /* keypad red */
+  --surface:#EEF1F3;
+  --focus:#1D5FD1;
+  --sans:"Hanken Grotesk",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"Martian Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --counter:#161C22;--paper:#F4F4F0;--ink:#E7ECEF;--muted:#9AA6B0;--rule:#34404B;
+    --surface:#1E262E;--ok:#3CC47C;--clear:#F0C23A;--cancel:#EF6B5B;--focus:#7FA8FF;
+  }
+}
+:root[data-theme="dark"]{
+  --counter:#161C22;--paper:#F4F4F0;--ink:#E7ECEF;--muted:#9AA6B0;--rule:#34404B;
+  --surface:#1E262E;--ok:#3CC47C;--clear:#F0C23A;--cancel:#EF6B5B;--focus:#7FA8FF;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px);scroll-behavior:smooth}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--counter);color:var(--ink);font:400 1.0625rem/1.6 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration-thickness:1px;text-underline-offset:3px}
+a:hover{text-decoration-thickness:2px}
+:focus-visible{outline:3px solid var(--focus);outline-offset:3px;border-radius:2px}
+.wrap{max-width:1120px;margin:0 auto;padding:0 clamp(1.25rem,4vw,2.5rem)}
+.skip{position:absolute;left:-999px}.skip:focus{left:1rem;top:1rem;background:var(--paper);color:#1B232B;padding:.5rem 1rem;z-index:9}
+
+/* ---------- hero ---------- */
+.hero{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:clamp(2rem,5vw,5rem);align-items:start;padding:clamp(3rem,8vw,6.5rem) 0 clamp(3rem,6vw,5rem)}
+.hero h1{font-weight:800;font-size:clamp(2.6rem,6.2vw,4.9rem);line-height:.98;letter-spacing:-.035em;margin:0 0 1.5rem}
+.hero h1 small{display:block;font-weight:500;font-size:.36em;letter-spacing:-.005em;line-height:1.3;color:var(--muted);margin-top:1rem}
+.lede{font-size:clamp(1.15rem,1.8vw,1.35rem);line-height:1.5;max-width:34ch;margin:0 0 2rem}
+.links{display:flex;flex-wrap:wrap;gap:.75rem;margin:0;padding:0;list-style:none}
+.links a{display:inline-flex;align-items:center;gap:.5rem;padding:.6rem 1rem;border:1.5px solid var(--ink);border-radius:999px;text-decoration:none;font-weight:600;font-size:.95rem}
+.links a.primary{background:var(--ink);color:var(--counter)}
+.links a:hover{background:var(--ink);color:var(--counter)}
+.where{margin-top:2rem;color:var(--muted);font-size:.95rem}
+
+/* the printer + receipt: the one bold element on the page */
+.printer{position:relative;justify-self:center;width:min(100%,360px)}
+.slot{height:18px;border-radius:9px;background:#2A333C;box-shadow:inset 0 3px 4px rgba(0,0,0,.55);position:relative;z-index:2}
+.feed{overflow:hidden;margin:-9px 14px 0;padding-top:9px}
+.receipt{background:var(--paper);color:#1B232B;font:400 .74rem/1.75 var(--mono);padding:1.6rem 1.35rem 2.2rem;
+  filter:drop-shadow(0 14px 18px rgba(20,30,40,.18));
+  -webkit-mask:linear-gradient(#000 0 0) top/100% calc(100% - 10px) no-repeat,
+    conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/14px 10px repeat-x;
+          mask:linear-gradient(#000 0 0) top/100% calc(100% - 10px) no-repeat,
+    conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/14px 10px repeat-x;
+  animation:print 2.6s steps(26,end) .35s both}
+@keyframes print{from{transform:translateY(-100%)}to{transform:translateY(0)}}
+.receipt .c{text-align:center}
+.receipt .b{font-weight:600}
+.receipt hr{border:0;border-top:1.5px dashed #9AA3AB;margin:.6rem 0}
+.receipt .row{display:flex;justify-content:space-between;gap:1rem}
+.receipt .sub{padding-left:1.2em;color:#56626D}
+.receipt .total{font-size:.95rem;font-weight:600}
+.receipt .approved{margin:1rem auto .3rem;width:max-content;padding:.25rem .8rem;border:2px solid #0E8A4F;color:#0E8A4F;font-weight:600;letter-spacing:.12em;transform:rotate(-3deg)}
+.barcode{height:34px;margin:.9rem 1rem 0;background:repeating-linear-gradient(90deg,#1B232B 0 2px,transparent 2px 4px,#1B232B 4px 5px,transparent 5px 8px,#1B232B 8px 11px,transparent 11px 12px)}
+
+/* ---------- sections ---------- */
+section{padding:clamp(3rem,7vw,5.5rem) 0;border-top:1.5px solid var(--rule)}
+h2{font-weight:800;font-size:clamp(1.8rem,3.6vw,2.6rem);letter-spacing:-.025em;line-height:1.1;margin:0 0 1rem}
+.intro{max-width:62ch;color:var(--muted);margin:0 0 2.5rem}
+.about{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:clamp(2rem,5vw,4rem)}
+.about p{margin:0 0 1rem;max-width:62ch}
+.facts{list-style:none;margin:0;padding:0;border-top:1.5px solid var(--ink)}
+.facts li{display:flex;justify-content:space-between;gap:1rem;padding:.75rem 0;border-bottom:1px solid var(--rule)}
+.facts span:last-child{font-weight:600;text-align:right}
+
+/* work areas: a ledger, not cards */
+.area{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.6fr);gap:clamp(1.25rem,4vw,3.5rem);padding:2rem 0;border-top:1px solid var(--rule)}
+.area:first-of-type{border-top:1.5px solid var(--ink)}
+.area h3{font-size:1.35rem;letter-spacing:-.015em;line-height:1.25;margin:0 0 .5rem}
+.area .tag{font-size:.9rem;color:var(--muted);margin:0}
+.area ul{margin:0;padding:0;list-style:none}
+.area li{position:relative;padding:0 0 .85rem 1.6rem;max-width:64ch}
+.area li::before{content:"";position:absolute;left:0;top:.62em;width:.6rem;height:.6rem;border-radius:2px;background:var(--ok)}
+.area li.inv::before{background:var(--clear)}
+
+/* timeline — a real sequence */
+.timeline{list-style:none;margin:0;padding:0;position:relative}
+.timeline::before{content:"";position:absolute;left:6.75rem;top:.4rem;bottom:.4rem;width:2px;background:var(--rule)}
+.timeline li{display:grid;grid-template-columns:5.75rem 1fr;gap:2rem;padding:0 0 2rem}
+.timeline time{white-space:nowrap;font-weight:700;font-variant-numeric:tabular-nums;text-align:right}
+.timeline .ev{position:relative}
+.timeline .ev::before{content:"";position:absolute;left:-1.35rem;top:.45rem;width:.7rem;height:.7rem;border-radius:50%;background:var(--counter);border:2px solid var(--ink)}
+.timeline h3{margin:0 0 .25rem;font-size:1.1rem}
+.timeline p{margin:0;max-width:60ch;color:var(--muted)}
+
+.skillgroups{display:grid;grid-template-columns:max-content 1fr;gap:.6rem 1.25rem;margin:0;border-top:1.5px solid var(--ink);padding-top:1rem}
+.skillgroups dt{font-weight:700}
+.skillgroups dd{margin:0}
+.certh{margin-top:2rem!important}
+.certs{margin:0;padding-left:1.1rem}
+.certs li{margin-bottom:.35rem}
+.area ul.judges li{display:flex;justify-content:space-between;max-width:22rem;padding-left:1.6rem;border-bottom:1px solid var(--rule);padding-bottom:.5rem;margin-bottom:.5rem}
+.area ul.judges li span{font-weight:700;font-variant-numeric:tabular-nums}
+.skills{display:flex;flex-wrap:wrap;gap:.5rem;margin:0;padding:0;list-style:none}
+.skills li{padding:.4rem .85rem;background:var(--surface);border-radius:6px;font-weight:500;font-size:.95rem}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:clamp(2rem,5vw,4rem)}
+.two h3{font-size:1.1rem;margin:0 0 1rem}
+.edu p{margin:0 0 .75rem}
+
+.contact{padding-bottom:clamp(4rem,9vw,7rem)}
+.contact p{max-width:52ch}
+footer{border-top:1.5px solid var(--rule);padding:1.5rem 0;color:var(--muted);font-size:.9rem}
+.theme{float:right;background:none;border:1.5px solid var(--rule);color:inherit;font:inherit;padding:.25rem .75rem;border-radius:999px;cursor:pointer}
+
+@media (max-width:860px){
+  .hero,.about,.area,.two{grid-template-columns:1fr}
+  .printer{order:-1;width:min(100%,330px)}
+  .hero{padding-top:2rem}
+}
+@media (max-width:520px){
+  .skillgroups{grid-template-columns:1fr;gap:.1rem}
+  .skillgroups dd{margin-bottom:.6rem}
+  .timeline::before{left:.3rem}
+  .timeline li{grid-template-columns:1fr;gap:.25rem;padding-left:1.6rem}
+  .timeline time{text-align:left}
+  .timeline .ev::before{left:-1.6rem;top:-1.3rem}
+}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .receipt{animation:none}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<main id="main">
+<div class="wrap">
+
+  <header class="hero">
+    <div>
+      <h1>Moinuddin Kader Chowdhury<small>Software Engineer, retail &amp; payment systems</small></h1>
+      <p class="lede">I write the C++ that runs inside cash registers: the code that talks to card terminals, fiscal printers and receipt printers when there's a queue at the checkout.</p>
+      <ul class="links">
+        <li><a class="primary" href="mailto:mkshovan@gmail.com">Email me</a></li>
+        <li><a href="https://github.com/Moinuddin-Shovan">GitHub</a></li>
+        <li><a href="https://www.linkedin.com/in/moinuddin-shovan">LinkedIn</a></li>
+        <li><a href="resume.pdf">Résumé (PDF)</a></li>
+      </ul>
+      <p class="where">Based in Dhaka, Bangladesh. Working with retail teams in Europe.</p>
+    </div>
+
+    <div class="printer" aria-label="Career summary styled as a till receipt">
+      <div class="slot" aria-hidden="true"></div>
+      <div class="feed">
+        <div class="receipt">
+          <div class="c b">SHOVAN&#39;S TILL</div>
+          <div class="c">Software Engineer<br>Dhaka, Bangladesh</div>
+          <hr>
+          <div class="row"><span>SINCE 07/2022</span><span>TILL 01</span></div>
+          <hr>
+          <div class="row"><span>C++ till core</span><span>4 yrs</span></div>
+          <div class="row"><span>Card terminal drivers</span><span>OK</span></div>
+          <div class="sub">Verifone P400/P630</div>
+          <div class="sub">Lane3000</div>
+          <div class="row"><span>Fiscal printing (PL)</span><span>OK</span></div>
+          <div class="sub">POSNET, KSeF</div>
+          <div class="row"><span>Receipts &amp; returns</span><span>OK</span></div>
+          <div class="row"><span>Loyalty &amp; discounts</span><span>OK</span></div>
+          <div class="row"><span>Automated tests</span><span>OK</span></div>
+          <hr>
+          <div class="row"><span>Daily transactions</span><span>3M+</span></div>
+          <div class="row"><span>Tickets closed</span><span>303</span></div>
+          <div class="row"><span>High/critical bugs</span><span>28</span></div>
+          <hr>
+          <div class="row total"><span>TOTAL</span><span>Tills that recover</span></div>
+          <div class="approved">APPROVED</div>
+          <div class="c">Keep this receipt</div>
+          <div class="barcode" aria-hidden="true"></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <section id="about" class="about" aria-labelledby="about-h">
+    <div>
+      <h2 id="about-h">About</h2>
+      <ul class="facts">
+        <li><span>Role</span><span>Software Engineer</span></li>
+        <li><span>Company</span><span>Fiftytwo Digital Ltd.</span></li>
+        <li><span>Since</span><span>July 2022</span></li>
+        <li><span>Main language</span><span>C++</span></li>
+        <li><span>Team</span><span>Denmark &amp; Bangladesh</span></li>
+        <li><span>Location</span><span>Dhaka, Bangladesh</span></li>
+      </ul>
+    </div>
+    <div>
+      <p>At Fiftytwo Digital I work on an omni-channel retail platform used by grocery, DIY, beauty and paint retailers across Scandinavia, Germany and Poland. Most of my time goes to the parts of the till that meet hardware and money: payment terminal drivers, fiscal printers, receipt and journal output, and the tender logic behind returns and corrections.</p>
+      <p>This is the kind of software nobody notices until it fails at a busy checkout. So I care about the unglamorous parts: reproducing a customer's bug exactly before touching it, making payment flows recover when a terminal drops out mid-transaction, and leaving an automated test behind so the same bug stays fixed.</p>
+      <p>The systems I maintain handle more than 3 million transactions a day. I've closed over 300 tickets, from critical production incidents to spikes and quotations for new features, and I work closely with hardware vendors when a problem sits between our code and theirs. Day to day I'm part of an Agile team split between Denmark and Bangladesh, and I write code test-first where I can.</p>
+      <p>Before retail, I built Android and Flutter apps with on-device machine learning, and my thesis was a computer-vision system for detecting patient falls. I still follow that world closely: AI automation, MLOps and LLMOps, computer vision and security.</p>
+    </div>
+  </section>
+
+  <section id="work" aria-labelledby="work-h">
+    <h2 id="work-h">What I work on</h2>
+    <p class="intro">A selection of my work at Fiftytwo Digital, grouped by area. Customer names are left out.</p>
+
+    <article class="area">
+      <div>
+        <h3>Card payments &amp; EFT drivers</h3>
+        <p class="tag">Verifone P400 and P630, Lane3000, payment SDKs</p>
+      </div>
+      <ul>
+        <li>Made the payment flow recover when a card terminal aborts a card-info request mid-transaction, instead of leaving the till stuck.</li>
+        <li>Investigated and fixed broken reconnection after dropped terminal connections, including working with the vendor on whether their protocol needed an acknowledgement, and handled driver failures cleanly on the till side.</li>
+        <li>Fixed split payments and returns on the Verifone P630, cashback on Verifone terminals, and a terminal re-prompting for an already cancelled amount.</li>
+        <li>Resolved a double-payment issue and message-ordering bugs on Lane3000, and stopped terminal status updates from flooding the trace log.</li>
+        <li>Added automatic log rotation and cleanup to the payment SDK integration, plus a debug-output mode so vendors can diagnose issues from the field.</li>
+        <li>Corrected a protocol bug where optional JSON data was sent in the wrong terminal command.</li>
+      </ul>
+    </article>
+
+    <article class="area">
+      <div>
+        <h3>Fiscal printing in Poland</h3>
+        <p class="tag">POSNET thermal fiscal printers, KSeF e-invoicing</p>
+      </div>
+      <ul>
+        <li>Built and maintained fiscal printer support for a paint retailer's Polish stores: sales, parked, cancelled and return receipts, and customers who are exempt from fiscalisation.</li>
+        <li>Implemented manual returns tied to KSeF, Poland's national e-invoicing system, across the POS UI and transaction records.</li>
+        <li>Fixed missing special characters, missing employee IDs and incorrect return receipts on fiscal and non-fiscal prints.</li>
+      </ul>
+    </article>
+
+    <article class="area">
+      <div>
+        <h3>Receipts, returns &amp; tender logic</h3>
+        <p class="tag">Correction receipts, discounts, gift cards, cash statements</p>
+      </div>
+      <ul>
+        <li>Fixed several cases where staff, B2B or senior discounts were wrongly paid out as cash on correction and return receipts.</li>
+        <li>Tracked down order numbers and basket discounts that "leaked" from one receipt into the next until the till was restarted.</li>
+        <li>Fixed digital receipt totals, multi-gift-card receipts, missing logos on receipt copies, and Z-reports missing from the terminal after a cash statement.</li>
+        <li>Stopped a production incident where tills were stuck printing the same card payment confirmation in a loop.</li>
+      </ul>
+    </article>
+
+    <article class="area">
+      <div>
+        <h3>Loyalty, identity &amp; APIs</h3>
+        <p class="tag">Membership clubs, script API, identity management</p>
+      </div>
+      <ul>
+        <li>Designed and implemented how loyalty points are distributed across receipt lines, starting from a spike and delivering it in two parts.</li>
+        <li>Updated membership club integrations: new HTTP PATCH support, endpoint changes, and fewer redundant impersonation-token calls.</li>
+        <li>Exposed POS and receipt context to shared services through the till's script API.</li>
+        <li class="inv">Worked on upgrading the WSO2 identity and access management layer to its latest version.</li>
+      </ul>
+    </article>
+
+    <article class="area">
+      <div>
+        <h3>Services &amp; algorithms</h3>
+        <p class="tag">Low-latency APIs, microservices, loyalty search</p>
+      </div>
+      <ul>
+        <li>Designed and integrated low-latency APIs that connect back-office servers with the cash registers.</li>
+        <li>Built microservices in JavaScript and Python on PostgreSQL, deployed with Docker on AWS.</li>
+        <li>Helped implement tree-search algorithms that pick the best combination of offers across several loyalty programs.</li>
+        <li>Optimised C++ services and components on systems handling over 3 million transactions a day.</li>
+      </ul>
+    </article>
+
+    <article class="area">
+      <div>
+        <h3>Quality &amp; delivery</h3>
+        <p class="tag">Automated tests, spikes, quotations, branch merges</p>
+      </div>
+      <ul>
+        <li>Wrote automated regression tests for fixed bugs, and an end-to-end test for the receipt print API.</li>
+        <li>Wrote spikes and effort quotations for new features such as bottle deposit handling and age verification by birthday.</li>
+        <li>Merged customer-specific branches back into the mainline, and documented flows such as B2C checkout.</li>
+      </ul>
+    </article>
+  </section>
+
+  <section id="experience" aria-labelledby="exp-h">
+    <h2 id="exp-h">Experience</h2>
+    <p class="intro">Software Engineer at Fiftytwo Digital Ltd., Dhaka, since July 2022. Before that, Android Developer Intern at Stamasoft Technologies, Chittagong.</p>
+    <ol class="timeline">
+      <li><time datetime="2025">2025–26</time><div class="ev"><h3>Payment reliability and e-invoicing</h3><p>Verifone driver reconnection and recovery, split payments, payment SDK logging, and KSeF manual returns for Poland.</p></div></li>
+      <li><time datetime="2024">2024</time><div class="ev"><h3>Fiscal printing and platform APIs</h3><p>POSNET fiscal printer receipts, membership club API changes, identity management upgrade, and feature quotations.</p></div></li>
+      <li><time datetime="2023">2023</time><div class="ev"><h3>Loyalty, scripting and terminals</h3><p>Loyalty point distribution, script API for shared services, Lane3000 terminal fixes, and cash statement issues.</p></div></li>
+      <li><time datetime="2022">2022</time><div class="ev"><h3>Software Engineer, Fiftytwo Digital</h3><p>Joined Fiftytwo Digital. Fixed discount, correction receipt, gift card and digital receipt bugs, and added automated tests.</p></div></li>
+      <li><time datetime="2021-11">2021–22</time><div class="ev"><h3>Android Developer Intern, Stamasoft Technologies</h3><p>Built Flutter and Kotlin apps including a Firebase-backed parcel delivery system, integrated ML models and third-party SDKs, and cut crashes by 30% through structured testing and debugging.</p></div></li>
+    </ol>
+  </section>
+
+  <section id="projects" aria-labelledby="proj-h">
+    <h2 id="proj-h">Projects</h2>
+    <p class="intro">Work from university and my own time.</p>
+
+    <article class="area">
+      <div>
+        <h3>Patient action detection and early warning</h3>
+        <p class="tag">Undergraduate thesis. Deep learning, computer vision</p>
+      </div>
+      <ul>
+        <li>Proposed a camera-based monitoring system that detects patient falls and raises an early warning.</li>
+        <li>MobileNetV2 and a 2D CNN extract features from each frame; a GRU models the motion over time; a sigmoid classifier trained with binary cross-entropy makes the call.</li>
+        <li>Reached 99% precision on fall detection.</li>
+      </ul>
+    </article>
+
+    <article class="area">
+      <div>
+        <h3>Bohon, a parcel delivery app</h3>
+        <p class="tag">Flutter, Firebase, MongoDB</p>
+      </div>
+      <ul>
+        <li>Cross-platform app for multiple real-time users, with Firebase Auth and Google sign-in.</li>
+        <li>Built-in chat with salt-encrypted messages, first on Firestore and later moved to MongoDB, plus push notifications for new activity.</li>
+      </ul>
+    </article>
+
+    <article class="area">
+      <div>
+        <h3>E-commerce site</h3>
+        <p class="tag">Python, Django, PostgreSQL, Stripe</p>
+      </div>
+      <ul>
+        <li>Responsive store with validated sign-up and profiles, an admin panel for products, customers and vendors, and seller ratings after each purchase.</li>
+        <li>Product filtering by category and price, Stripe payments, and order tracking by purchase ID.</li>
+      </ul>
+    </article>
+
+    <article class="area">
+      <div>
+        <h3>Competitive programming</h3>
+        <p class="tag">Problems solved across judges</p>
+      </div>
+      <ul class="judges">
+        <li><a href="https://leetcode.com/u/mkshovan/">LeetCode</a><span>120+</span></li>
+        <li><a href="https://onlinejudge.org/">UVa Online Judge</a><span>120+</span></li>
+        <li><a href="https://www.hackerrank.com/profile/Moinuddin_Shovan">HackerRank</a><span>100+</span></li>
+        <li><a href="https://codeforces.com/profile/Moinuddin_Shovan">Codeforces</a><span>85+</span></li>
+      </ul>
+    </article>
+  </section>
+
+  <section id="skills" aria-labelledby="skills-h">
+    <div class="two">
+      <div>
+        <h2 id="skills-h">Skills</h2>
+        <dl class="skillgroups">
+          <dt>Languages</dt><dd>C++, Python, JavaScript, Go, Java, Dart, Bash</dd>
+          <dt>Retail &amp; payments</dt><dd>EFT terminal drivers, fiscal printers, low-latency APIs, TDD</dd>
+          <dt>Web</dt><dd>Django, React, Express, Node.js</dd>
+          <dt>Mobile</dt><dd>Flutter, Android (Kotlin)</dd>
+          <dt>Machine learning</dt><dd>OpenCV, TensorFlow, PyTorch, scikit-learn</dd>
+          <dt>Databases</dt><dd>PostgreSQL, MySQL, MongoDB, Firebase</dd>
+          <dt>Ops &amp; tools</dt><dd>Git, Docker, Kubernetes, AWS, Jenkins, CI/CD, Atlassian tools</dd>
+          <dt>Design</dt><dd>Figma, Photoshop, Canva</dd>
+        </dl>
+      </div>
+      <div class="edu">
+        <h2>Education</h2>
+        <p><strong>B.Sc. Engineering in Computer Science and Engineering</strong><br>University of Chittagong, 2022. CGPA 3.43 of 4.00, averaging above 3.50 over the last four semesters.</p>
+        <p><strong>Higher Secondary Certificate</strong><br>Chittagong College, 2016. GPA 5.00 of 5.00.</p>
+        <h3 class="certh">Certifications</h3>
+        <ul class="certs">
+          <li>ITEE Fundamental IT Engineer, IPA Japan (full passer, November 2021)</li>
+          <li>Generative AI with LLMs, DeepLearning.AI on Coursera</li>
+          <li>Advanced Android Development Bootcamp, Stamasoft Technologies</li>
+          <li>Complete Flutter Development, Udemy</li>
+          <li>Data Science Fundamentals, 365 DataScience</li>
+          <li>IELTS overall 6.5 (listening 7)</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="contact" class="contact" aria-labelledby="contact-h">
+    <h2 id="contact-h">Get in touch</h2>
+    <p>I'm interested in systems work where software meets hardware and money, from payments and retail to low-latency services, and in applied ML and AI automation. Email is the fastest way to reach me.</p>
+    <ul class="links">
+      <li><a class="primary" href="mailto:mkshovan@gmail.com">Email me</a></li>
+      <li><a href="https://github.com/Moinuddin-Shovan">GitHub</a></li>
+      <li><a href="https://www.linkedin.com/in/moinuddin-shovan">LinkedIn</a></li>
+    </ul>
+  </section>
+
+</div>
+</main>
+<footer>
+  <div class="wrap">
+    <button class="theme" type="button" id="theme">Switch theme</button>
+    © <span id="yr">2026</span> Mohammad Moinuddin Kader Chowdhury
+  </div>
+</footer>
+<script>
+document.getElementById('yr').textContent=new Date().getFullYear();
+(function(){
+  var root=document.documentElement,btn=document.getElementById('theme'),saved=null;
+  try{saved=localStorage.getItem('theme')}catch(e){}
+  if(saved)root.setAttribute('data-theme',saved);
+  btn.addEventListener('click',function(){
+    var cur=root.getAttribute('data-theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+    var next=cur==='dark'?'light':'dark';
+    root.setAttribute('data-theme',next);
+    try{localStorage.setItem('theme',next)}catch(e){}
+  });
+})();
+</script>
+</body>
+</html>
